@@ -1,0 +1,2 @@
+- This project is for learning and attempting to translate pytorch model [table-structure-recognition](https://modelscope.cn/models/iic/cv_resnet-transformer_table-structure-recognition_lore/summary) to `burn`
+- pytorch [model file](https://filebin.net/qt9zpzswr79n3iac/cv_resnet-transformer_table-structure-recognition_lore.pt). This link will expire on 2024-03-11.

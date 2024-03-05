@@ -351,7 +351,13 @@ impl<B: Backend> Encoder<B> {
         let mut layers_record = record.layers;
         let layers = (0..n)
             .map(|_| {
-                EncoderLayer::new_with(hidden_size, heads, dropout, device, layers_record.pop().unwrap())
+                EncoderLayer::new_with(
+                    hidden_size,
+                    heads,
+                    dropout,
+                    device,
+                    layers_record.pop().unwrap(),
+                )
             })
             .collect();
         Self {
@@ -412,7 +418,14 @@ impl<B: Backend> Transformer<B> {
         record: TransformerRecord<B>,
     ) -> Self {
         let linear = LinearConfig::new(input_size, hidden_size).init_with(record.linear);
-        let encoder = Encoder::new_with(hidden_size, n_layers, heads, dropout, device, record.encoder);
+        let encoder = Encoder::new_with(
+            hidden_size,
+            n_layers,
+            heads,
+            dropout,
+            device,
+            record.encoder,
+        );
         let decoder = Decoder::new_with(hidden_size, output_size, record.decoder);
         Self {
             linear,

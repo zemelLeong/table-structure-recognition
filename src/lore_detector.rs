@@ -2,10 +2,10 @@ use burn::module::Module;
 use burn::nn::conv::{Conv2d, Conv2dConfig, ConvTranspose2d, ConvTranspose2dConfig};
 use burn::nn::pool::{MaxPool2d, MaxPool2dConfig};
 use burn::nn::{BatchNorm, BatchNormConfig, PaddingConfig2d};
+use burn::tensor::activation::relu;
 use burn::tensor::backend::Backend;
 use burn::tensor::Tensor;
 use std::collections::HashMap;
-use burn::tensor::activation::relu;
 
 const BN_MOMENTUM: f64 = 0.1;
 
@@ -75,7 +75,6 @@ impl<B: Backend> SequentialConv2d<B> {
 
     fn forward(&self, x: Tensor<B, 4>) -> Tensor<B, 4> {
         let mut x = x;
-        // let relu = ReLU::new();
         for (index, layer) in self.layers.iter().enumerate() {
             x = layer.forward(x);
             if index < self.layers.len() - 1 {
@@ -84,6 +83,12 @@ impl<B: Backend> SequentialConv2d<B> {
         }
         x
     }
+}
+
+#[derive(Module, Debug)]
+pub enum Layers<B: Backend> {
+    Conv2d(Conv2d<B>),
+    BatchNorm(BatchNorm<B, 2>),
 }
 
 #[derive(Module, Debug)]
