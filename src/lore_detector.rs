@@ -89,6 +89,7 @@ impl<B: Backend> SequentialConv2d<B> {
 pub enum Layers<B: Backend> {
     Conv2d(Conv2d<B>),
     BatchNorm(BatchNorm<B, 2>),
+    ConvTranspose2d(ConvTranspose2d<B>),
 }
 
 #[derive(Module, Debug)]
@@ -99,8 +100,7 @@ pub struct DownSample<B: Backend> {
 
 #[derive(Module, Debug)]
 pub struct DeconvLayer<B: Backend> {
-    conv: ConvTranspose2d<B>,
-    bn: BatchNorm<B, 2>,
+    layers: Vec<Layers<B>>,
 }
 
 impl<B: Backend> DeconvLayer<B> {
@@ -113,21 +113,36 @@ impl<B: Backend> DeconvLayer<B> {
         output_padding: usize,
         record: DeconvLayerRecord<B>,
     ) -> Self {
-        let conv = ConvTranspose2dConfig::new([inplanes, planes], [kernel, kernel])
-            .with_stride([stride, stride])
-            .with_padding([padding, padding])
-            .with_padding_out([output_padding, output_padding])
-            .with_bias(false)
-            .init_with(record.conv);
-        let bn = BatchNormConfig::new(planes)
-            .with_momentum(BN_MOMENTUM)
-            .init_with(record.bn);
-        Self { conv, bn }
+        let layers = record.layers.into_iter().map(|l| match l {
+            LayersRecord::BatchNorm(b) => {
+                let bn = BatchNormConfig::new(planes)
+                    .with_momentum(BN_MOMENTUM)
+                    .init_with(b);
+                Layers::BatchNorm(bn)
+            }
+            LayersRecord::ConvTranspose2d(c) => {
+                let ct = ConvTranspose2dConfig::new([inplanes, planes], [kernel, kernel])
+                    .with_stride([stride, stride])
+                    .with_padding([padding, padding])
+                    .with_padding_out([output_padding, output_padding])
+                    .with_bias(false)
+                    .init_with(c);
+                Layers::ConvTranspose2d(ct)
+            }
+            _ => panic!("Invalid layer"),
+        }).collect();
+        Self { layers }
     }
 
     pub fn forward(&self, x: Tensor<B, 4>) -> Tensor<B, 4> {
-        let out = self.conv.forward(x);
-        let out = self.bn.forward(out);
+        let mut out = x;
+        for layer in self.layers.iter() {
+            match layer {
+                Layers::ConvTranspose2d(ct) => out = ct.forward(out),
+                Layers::BatchNorm(bn) => out = bn.forward(out),
+                _ => panic!("Invalid layer"),
+            }
+        }
         relu(out)
     }
 }
@@ -252,6 +267,11 @@ pub struct LoreDetectModel<B: Backend> {
     reg: SequentialConv2d<B>,
     st: SequentialConv2d<B>,
     wh: SequentialConv2d<B>,
+}
+
+#[derive(Module, Debug)]
+pub struct LoreDetectModelS<B: Backend> {
+    adaption_u1: Conv2d<B>,
 }
 
 impl<B: Backend> LoreDetectModel<B> {
