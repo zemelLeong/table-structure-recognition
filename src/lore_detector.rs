@@ -269,11 +269,6 @@ pub struct LoreDetectModel<B: Backend> {
     wh: SequentialConv2d<B>,
 }
 
-#[derive(Module, Debug)]
-pub struct LoreDetectModelS<B: Backend> {
-    adaption_u1: Conv2d<B>,
-}
-
 impl<B: Backend> LoreDetectModel<B> {
     fn get_heads() -> HashMap<String, usize> {
         HashMap::from([
