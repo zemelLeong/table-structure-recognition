@@ -6,7 +6,6 @@ use burn::tensor::activation::relu;
 use burn::tensor::backend::Backend;
 use burn::tensor::Tensor;
 use std::collections::HashMap;
-use burn::record::Record;
 
 const BN_MOMENTUM: f64 = 0.1;
 
@@ -93,7 +92,7 @@ pub enum Layers<B: Backend> {
     ConvTranspose2d(ConvTranspose2d<B>),
 }
 
-impl <B:Backend> Layers<B> {
+impl<B: Backend> Layers<B> {
     pub fn forward(&self, x: Tensor<B, 4>) -> Tensor<B, 4> {
         match self {
             Layers::Conv2d(c) => c.forward(x),
@@ -101,7 +100,6 @@ impl <B:Backend> Layers<B> {
             Layers::ConvTranspose2d(ct) => ct.forward(x),
         }
     }
-
 }
 
 #[derive(Module, Debug)]
@@ -300,6 +298,11 @@ pub struct LoreDetectModel<B: Backend> {
     wh: SequentialConv2d<B>,
 }
 
+#[derive(Module, Debug)]
+pub struct LoreDetectModelS<B: Backend> {
+    layer1: Sequential<B>,
+}
+
 impl<B: Backend> LoreDetectModel<B> {
     fn get_heads() -> HashMap<String, usize> {
         HashMap::from([
@@ -483,7 +486,7 @@ impl<B: Backend> LoreDetectModel<B> {
         record: SequentialRecord<B>,
     ) -> Sequential<B> {
         let mut record = record;
-        let first_layer = record.layers.pop().expect("No layers in record");
+        let first_layer = record.layers.remove(0);
 
         let stride = stride.unwrap_or(1);
 
@@ -501,7 +504,7 @@ impl<B: Backend> LoreDetectModel<B> {
         self.inplanes = planes;
         assert_eq!(blocks - 1, record.layers.len());
         for _ in 1..blocks {
-            let block_record = record.layers.pop().expect("No layers in record");
+            let block_record = record.layers.remove(0);
             let block = BasicBlock::new_with(self.inplanes, planes, stride, false, block_record);
             sequential.add(block);
         }

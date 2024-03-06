@@ -54,8 +54,8 @@ impl<B: Backend> Stacker<B> {
         let mut le = record.logi_encoder;
         let heads = heads.unwrap_or(8);
         let logic_encoder = SequentialLinear::from(vec![
-            LinearConfig::new(input_size, hidden_size).init_with(le.layers.pop().unwrap()),
-            LinearConfig::new(hidden_size, hidden_size).init_with(le.layers.pop().unwrap()),
+            LinearConfig::new(input_size, hidden_size).init_with(le.layers.remove(0)),
+            LinearConfig::new(hidden_size, hidden_size).init_with(le.layers.remove(0)),
         ]);
 
         Self {
@@ -351,13 +351,7 @@ impl<B: Backend> Encoder<B> {
         let mut layers_record = record.layers;
         let layers = (0..n)
             .map(|_| {
-                EncoderLayer::new_with(
-                    hidden_size,
-                    heads,
-                    dropout,
-                    device,
-                    layers_record.pop().unwrap(),
-                )
+                EncoderLayer::new_with(hidden_size, heads, dropout, device, layers_record.remove(0))
             })
             .collect();
         Self {
@@ -387,8 +381,8 @@ impl<B: Backend> Decoder<B> {
     pub fn new_with(hidden_size: usize, output_size: usize, record: DecoderRecord<B>) -> Self {
         let mut linears_record = record.linear.layers;
         let linear = SequentialLinear::from(vec![
-            LinearConfig::new(hidden_size, hidden_size).init_with(linears_record.pop().unwrap()),
-            LinearConfig::new(hidden_size, output_size).init_with(linears_record.pop().unwrap()),
+            LinearConfig::new(hidden_size, hidden_size).init_with(linears_record.remove(0)),
+            LinearConfig::new(hidden_size, output_size).init_with(linears_record.remove(0)),
         ]);
         Self { linear }
     }
