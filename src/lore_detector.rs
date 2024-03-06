@@ -6,6 +6,7 @@ use burn::tensor::activation::relu;
 use burn::tensor::backend::Backend;
 use burn::tensor::Tensor;
 use std::collections::HashMap;
+use burn::record::Record;
 
 const BN_MOMENTUM: f64 = 0.1;
 
@@ -92,10 +93,20 @@ pub enum Layers<B: Backend> {
     ConvTranspose2d(ConvTranspose2d<B>),
 }
 
+impl <B:Backend> Layers<B> {
+    pub fn forward(&self, x: Tensor<B, 4>) -> Tensor<B, 4> {
+        match self {
+            Layers::Conv2d(c) => c.forward(x),
+            Layers::BatchNorm(b) => b.forward(x),
+            Layers::ConvTranspose2d(ct) => ct.forward(x),
+        }
+    }
+
+}
+
 #[derive(Module, Debug)]
 pub struct DownSample<B: Backend> {
-    conv: Conv2d<B>,
-    bn: BatchNorm<B, 2>,
+    layers: Vec<Layers<B>>,
 }
 
 #[derive(Module, Debug)]
@@ -113,24 +124,28 @@ impl<B: Backend> DeconvLayer<B> {
         output_padding: usize,
         record: DeconvLayerRecord<B>,
     ) -> Self {
-        let layers = record.layers.into_iter().map(|l| match l {
-            LayersRecord::BatchNorm(b) => {
-                let bn = BatchNormConfig::new(planes)
-                    .with_momentum(BN_MOMENTUM)
-                    .init_with(b);
-                Layers::BatchNorm(bn)
-            }
-            LayersRecord::ConvTranspose2d(c) => {
-                let ct = ConvTranspose2dConfig::new([inplanes, planes], [kernel, kernel])
-                    .with_stride([stride, stride])
-                    .with_padding([padding, padding])
-                    .with_padding_out([output_padding, output_padding])
-                    .with_bias(false)
-                    .init_with(c);
-                Layers::ConvTranspose2d(ct)
-            }
-            _ => panic!("Invalid layer"),
-        }).collect();
+        let layers = record
+            .layers
+            .into_iter()
+            .map(|l| match l {
+                LayersRecord::BatchNorm(b) => {
+                    let bn = BatchNormConfig::new(planes)
+                        .with_momentum(BN_MOMENTUM)
+                        .init_with(b);
+                    Layers::BatchNorm(bn)
+                }
+                LayersRecord::ConvTranspose2d(c) => {
+                    let ct = ConvTranspose2dConfig::new([inplanes, planes], [kernel, kernel])
+                        .with_stride([stride, stride])
+                        .with_padding([padding, padding])
+                        .with_padding_out([output_padding, output_padding])
+                        .with_bias(false)
+                        .init_with(c);
+                    Layers::ConvTranspose2d(ct)
+                }
+                _ => panic!("Invalid layer"),
+            })
+            .collect();
         Self { layers }
     }
 
@@ -154,19 +169,35 @@ impl<B: Backend> DownSample<B> {
         stride: usize,
         record: DownSampleRecord<B>,
     ) -> Self {
-        let conv = Conv2dConfig::new([inplanes, planes], [1, 1])
-            .with_stride([stride, stride])
-            .with_bias(false)
-            .init_with(record.conv);
-        let bn = BatchNormConfig::new(planes)
-            .with_momentum(0.1)
-            .init_with(record.bn);
-        Self { conv, bn }
+        let layers = record
+            .layers
+            .into_iter()
+            .map(|l| match l {
+                LayersRecord::Conv2d(c) => {
+                    let conv = Conv2dConfig::new([inplanes, planes], [1, 1])
+                        .with_stride([stride, stride])
+                        .with_bias(false)
+                        .init_with(c);
+                    Layers::Conv2d(conv)
+                }
+                LayersRecord::BatchNorm(b) => {
+                    let bn = BatchNormConfig::new(planes)
+                        .with_momentum(BN_MOMENTUM)
+                        .init_with(b);
+                    Layers::BatchNorm(bn)
+                }
+                _ => panic!("Invalid layer"),
+            })
+            .collect();
+        Self { layers }
     }
 
     pub fn forward(&self, x: Tensor<B, 4>) -> Tensor<B, 4> {
-        let out = self.conv.forward(x);
-        self.bn.forward(out)
+        let mut out = x;
+        for layer in self.layers.iter() {
+            out = layer.forward(out);
+        }
+        out
     }
 }
 
@@ -487,15 +518,10 @@ impl<B: Backend> LoreDetectModel<B> {
         let msg = "ERROR: num_deconv_layers is different len(num_deconv_filters)";
         assert_eq!(num_layers, num_filters.len(), "{}", msg);
         assert_eq!(num_layers, num_kernels.len(), "{}", msg);
-        assert_eq!(
-            num_layers,
-            record.layers.len(),
-            "num_layers is different len(record.layers)"
-        );
 
         let mut layers = SequentialDeconv::new();
-        for (i, r) in record.layers.into_iter().enumerate() {
-            let kernel = num_kernels[i];
+        for r in record.layers.into_iter() {
+            let kernel = num_kernels[0];
             let padding = match kernel {
                 4 => 1,
                 3 => 1,
@@ -510,7 +536,7 @@ impl<B: Backend> LoreDetectModel<B> {
                 7 => 0,
                 _ => panic!("Invalid kernel size"),
             };
-            let planes = num_filters[i];
+            let planes = num_filters[0];
             let deconv =
                 DeconvLayer::new_with(self.inplanes, planes, kernel, 2, padding, output_padding, r);
             layers.add(deconv);
